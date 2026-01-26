@@ -35,6 +35,38 @@ class NoteNotifier extends Notifier<NoteState> {
   }
 
   void setCurrentNoteById(String id) {
+    final raw = _notesBox.get(id);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        if (map.containsKey('enc')) {
+          final enc = map['enc'] as String;
+          final key = _masterKey;
+          String content;
+          if (key != null) {
+            try {
+              content = NoteCipher.decryptFromCompactString(
+                masterKey: key,
+                raw: enc,
+                aad: Uint8List.fromList(utf8.encode(id)),
+              );
+            } catch (_) {
+              content = '[Decryption failed]';
+            }
+          } else {
+            content = '[Encrypted note]';
+          }
+          map['content'] = content;
+        }
+        debugPrint(
+          'HIVE isSynced raw=${map['isSynced']} type=${map['isSynced']?.runtimeType}',
+        );
+        final fresh = LocalNote.fromJson(map);
+        debugPrint('LocalNote.isSynced parsed=${fresh.isSynced}');
+        state = state.copyWith(currentNote: fresh);
+        return;
+      } catch (_) {}
+    }
     final found = state.notes.where((n) => n.id == id).toList();
     state = state.copyWith(currentNote: found.isEmpty ? null : found.first);
   }
@@ -67,7 +99,7 @@ class NoteNotifier extends Notifier<NoteState> {
       content: '',
       createdAt: now,
       updatedAt: now,
-      isSynced: true,
+      isSynced: false,
       isDeleted: false,
       version: 1,
       serverNoteId: null,
@@ -100,7 +132,11 @@ class NoteNotifier extends Notifier<NoteState> {
   }
 
   Future<void> updateNoteById(String noteId, String text) async {
-    // 只更新 UI currentNote/列表（不立即落盘，避免每个字符写 hive）
+    final cur = state.currentNote;
+    if (cur != null && cur.id == noteId && cur.content == text) {
+      return; // ✅ 文本没变，不要把 isSynced 置 false
+    }
+
     final now = DateTime.now();
     final notes = [...state.notes];
 
@@ -113,7 +149,6 @@ class NoteNotifier extends Notifier<NoteState> {
       );
     }
 
-    final cur = state.currentNote;
     if (cur != null && cur.id == noteId) {
       state = state.copyWith(
         notes: notes,
@@ -266,6 +301,38 @@ class NoteNotifier extends Notifier<NoteState> {
     m['isSynced'] = true;
     if (serverNoteId != null) m['serverNoteId'] = serverNoteId;
     await _notesBox.put(clientNoteId, jsonEncode(m));
+    final prevNotes = state.notes;
+    final idx = prevNotes.indexWhere((e) => e.id == clientNoteId);
+
+    if (idx >= 0) {
+      final updated = [...prevNotes];
+      updated[idx] = updated[idx].copyWith(
+        isSynced: true,
+        serverNoteId: serverNoteId?.toString() ?? updated[idx].serverNoteId,
+      );
+
+      final cur = state.currentNote;
+      state = state.copyWith(
+        notes: updated,
+        currentNote: (cur != null && cur.id == clientNoteId)
+            ? cur.copyWith(
+                isSynced: true,
+                serverNoteId: serverNoteId?.toString() ?? cur.serverNoteId,
+              )
+            : cur,
+      );
+    } else {
+      // 没在列表里就至少保证 currentNote 正确
+      final cur = state.currentNote;
+      if (cur != null && cur.id == clientNoteId) {
+        state = state.copyWith(
+          currentNote: cur.copyWith(
+            isSynced: true,
+            serverNoteId: serverNoteId?.toString() ?? cur.serverNoteId,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> syncToCloud() async {

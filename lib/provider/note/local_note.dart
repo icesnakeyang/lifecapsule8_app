@@ -71,23 +71,4 @@ class LocalNote {
       type: type ?? this.type,
     );
   }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is LocalNote &&
-        other.id == id &&
-        other.content == content &&
-        other.createdAt == createdAt &&
-        other.updatedAt == updatedAt &&
-        other.type == type;
-  }
-
-  @override
-  int get hashCode =>
-      id.hashCode ^
-      content.hashCode ^
-      createdAt.hashCode ^
-      updatedAt.hashCode ^
-      type.hashCode;
 }

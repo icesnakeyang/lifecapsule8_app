@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lifecapsule8_app/crypto/crypto_provider.dart';
 import 'package:lifecapsule8_app/provider/app_luanch_provider.dart';
 import 'package:lifecapsule8_app/provider/note/note_provider.dart';
+import 'package:lifecapsule8_app/provider/note/note_state.dart';
 import 'package:lifecapsule8_app/theme/theme_provider.dart';
 
 class NoteEdit extends ConsumerStatefulWidget {
@@ -22,10 +23,12 @@ class _NoteEditState extends ConsumerState<NoteEdit>
 
   bool _showTip1 = true;
   bool _showPrivateInfo = true;
+  String _initialText = '';
 
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController();
     _focusNode = FocusNode();
@@ -57,11 +60,13 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     if (!mounted || current == null) return;
 
     _noteId = current.id;
+    notifier.setCurrentNoteById(_noteId!);
+    current = ref.read(noteProvider).currentNote;
+    if (current == null) return;
 
-    // 避免重复 listener：先清理再赋值（更稳）
-    _controller.removeListener(_onTextChanged);
     _controller.text = current.content;
-    _controller.addListener(_onTextChanged);
+
+    _initialText = _controller.text.trim();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -71,12 +76,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     });
 
     setState(() {});
-  }
-
-  void _onTextChanged() {
-    final id = _noteId;
-    if (id == null) return;
-    ref.read(noteProvider.notifier).updateNoteById(id, _controller.text);
   }
 
   @override
@@ -90,21 +89,33 @@ class _NoteEditState extends ConsumerState<NoteEdit>
   /// 切后台自动保存
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      if (_noteId != null) {
-        ref
-            .read(noteProvider.notifier)
-            .autoSaveOnBackground(_noteId!, _controller.text);
-      }
-    }
+    if (state != AppLifecycleState.paused) return;
+
+    final id = _noteId;
+    if (id == null) return;
+
+    final nowText = _controller.text.trim();
+    if (_initialText == nowText) return;
+
+    ref
+        .read(noteProvider.notifier)
+        .autoSaveOnBackground(_noteId!, _controller.text);
   }
 
   Future<void> _saveOrCreateBeforePop() async {
-    final notifier = ref.read(noteProvider.notifier);
-    if (_noteId != null) {
-      await notifier.saveOrDeleteNoteById(_noteId!, _controller.text);
+    final id = _noteId;
+    if (id == null) return;
+    final currentNote = ref.read(noteProvider).currentNote;
+    if (currentNote != null) {
+      final a = (currentNote.content).trim();
+      final b = (_controller.text).trim();
+      if (a == b && currentNote.isSynced == true) {
+        return;
+      }
     }
+    await ref
+        .read(noteProvider.notifier)
+        .saveOrDeleteNoteById(id, _controller.text);
   }
 
   @override
@@ -115,6 +126,16 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     final launchCount = ref.watch(appLaunchProvider);
     final isFirstLuanch = launchCount <= 10;
 
+    ref.listen<NoteState>(noteProvider, (prev, next) {
+      final n = next.currentNote;
+      if (n == null) return;
+      // ✅ 一旦同步成功，把“基线文本”更新成当前内容
+      if (n.isSynced) {
+        final t = n.content.trim();
+        if (_initialText != t) _initialText = t;
+      }
+    });
+
     final isStorageEncrypted =
         _noteId != null &&
         ref.read(noteProvider.notifier).isNoteEncrypted(_noteId!);
@@ -122,6 +143,7 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     final canEdit = !(isStorageEncrypted && !hasKey);
 
     final currentNote = ref.watch(noteProvider).currentNote;
+    final bool isSynced = currentNote?.isSynced == true;
 
     if (currentNote == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -206,10 +228,8 @@ class _NoteEditState extends ConsumerState<NoteEdit>
 
                   ///todo 如果失败，成功显示sync
                   icon: Icon(
-                    Icons.sync_problem,
-                    color: theme.error,
-                    // hasKey ? Icons.lock : Icons.lock_open,
-                    // color: hasKey ? theme.success : theme.error,
+                    isSynced ? Icons.cloud_done : Icons.sync_problem,
+                    color: isSynced ? theme.success : theme.error,
                   ),
                 ),
               ],
@@ -303,6 +323,11 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                 child: TextField(
                   controller: _controller,
                   focusNode: _focusNode,
+                  onChanged: (v) {
+                    final id = _noteId;
+                    if (id == null) return;
+                    ref.read(noteProvider.notifier).updateNoteById(id, v);
+                  },
                   readOnly: !canEdit,
                   maxLines: null,
 

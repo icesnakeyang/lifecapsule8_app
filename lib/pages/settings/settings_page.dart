@@ -15,12 +15,10 @@ class SettingsPage extends ConsumerWidget {
 
     // 2) Account binding status
     final userState = ref.watch(userProvider);
-    final hasAccount = userState.userId != null && userState.userId!.isNotEmpty;
-    // If you have email / phone / oauth info, prefer those instead:
-    // final hasAccount = userState.currentUser?.email?.isNotEmpty == true;
+    final bool canSyncRestore = userState.isEmailBound;
 
     final needEncryption = !hasKey;
-    final needAccountBind = !hasAccount;
+    final needAccountBind = !canSyncRestore;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -41,13 +39,13 @@ class SettingsPage extends ConsumerWidget {
               level: needEncryption ? _GuideLevel.danger : _GuideLevel.ok,
               actionText: needEncryption ? 'Enable Encryption' : 'Manage',
               onTap: () => Navigator.pushNamed(context, '/cryptosetting'),
-              showDot: true,
+              showDot: needEncryption,
             ),
 
             const SizedBox(height: 12),
 
             _GuideCard(
-              title: needAccountBind ? 'Account Not Bound' : 'Account Bound',
+              title: needAccountBind ? 'Email Not Bound' : 'Email Bound',
               subtitle: needAccountBind
                   ? 'Your notes are only stored on this device. '
                         'If you reinstall the app or switch to a new device, '
@@ -129,15 +127,18 @@ class _GuideCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status dot
-            Container(
-              margin: const EdgeInsets.only(top: 6, right: 10),
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: dotColor,
-              ),
-            ),
+            if (showDot)
+              Container(
+                margin: const EdgeInsets.only(top: 6, right: 10),
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dotColor,
+                ),
+              )
+            else
+              const SizedBox(width: 20),
 
             // Text content
             Expanded(
