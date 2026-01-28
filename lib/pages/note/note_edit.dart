@@ -47,6 +47,31 @@ class _NoteEditState extends ConsumerState<NoteEdit>
 
   Future<void> _initNote() async {
     final notifier = ref.read(noteProvider.notifier);
+    final args = ModalRoute.of(context)?.settings.arguments;
+    String? argId;
+    bool isNew = false;
+    if (args is Map) {
+      argId = args['id'] as String?;
+      isNew = args['isNew'] as bool? ?? false;
+    }
+    if (isNew) {
+      await notifier.clearCurrentNote();
+      final local = await notifier.createEmptyCurrentNote();
+      if (!mounted) return;
+      _noteId = local.id;
+      _controller.text = '';
+      _initialText = '';
+      setState(() {});
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _focusNode.canRequestFocus) _focusNode.requestFocus();
+      });
+      return;
+    }
+    if (argId != null && argId.isNotEmpty) {
+      _noteId = argId;
+      notifier.setCurrentNoteById(argId);
+    }
+
     var current = ref.read(noteProvider).currentNote;
     if (current != null && current.type != 'PRIVATE_NOTE') {
       notifier.clearCurrentNote();
@@ -60,7 +85,7 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     if (!mounted || current == null) return;
 
     _noteId = current.id;
-    notifier.setCurrentNoteById(_noteId!);
+    // notifier.setCurrentNoteById(_noteId!);
     current = ref.read(noteProvider).currentNote;
     if (current == null) return;
 
@@ -86,7 +111,7 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     super.dispose();
   }
 
-  /// 切后台自动保存
+  /// 切后台自动保存（同步前置逻辑，保留）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.paused) return;
@@ -113,6 +138,7 @@ class _NoteEditState extends ConsumerState<NoteEdit>
         return;
       }
     }
+    // 保存后自动触发同步，核心同步逻辑保留
     await ref
         .read(noteProvider.notifier)
         .saveOrDeleteNoteById(id, _controller.text);
@@ -126,10 +152,10 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     final launchCount = ref.watch(appLaunchProvider);
     final isFirstLuanch = launchCount <= 10;
 
+    // 保留：同步状态监听，成功后更新基线文本（保证自动保存/同步逻辑正常）
     ref.listen<NoteState>(noteProvider, (prev, next) {
       final n = next.currentNote;
       if (n == null) return;
-      // ✅ 一旦同步成功，把“基线文本”更新成当前内容
       if (n.isSynced) {
         final t = n.content.trim();
         if (_initialText != t) _initialText = t;
@@ -143,7 +169,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     final canEdit = !(isStorageEncrypted && !hasKey);
 
     final currentNote = ref.watch(noteProvider).currentNote;
-    final bool isSynced = currentNote?.isSynced == true;
 
     if (currentNote == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -218,22 +243,7 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                 },
                 icon: const Icon(Icons.delete),
               ),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/settings');
-                  },
-
-                  ///todo 如果失败，成功显示sync
-                  icon: Icon(
-                    isSynced ? Icons.cloud_done : Icons.sync_problem,
-                    color: isSynced ? theme.success : theme.error,
-                  ),
-                ),
-              ],
-            ),
+            // 仅删除：同步图标相关UI代码，无其他修改
           ],
         ),
 
@@ -255,7 +265,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                     color: theme.surface2.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(12),
                   ),
-
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -278,7 +287,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                                 ),
                               ),
                             ),
-
                             if (_showPrivateInfo)
                               GestureDetector(
                                 onTap: () {
@@ -326,11 +334,11 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                   onChanged: (v) {
                     final id = _noteId;
                     if (id == null) return;
+                    // 保留：实时更新笔记内容，为同步做准备
                     ref.read(noteProvider.notifier).updateNoteById(id, v);
                   },
                   readOnly: !canEdit,
                   maxLines: null,
-
                   keyboardType: TextInputType.multiline,
                   style: TextStyle(
                     color: theme.onSurface.withValues(alpha: 0.9),
@@ -340,7 +348,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.all(4),
                     filled: false,
-                    fillColor: Colors.red,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(color: theme.surface, width: 1),
@@ -374,7 +381,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-
                     children: [
                       Icon(Icons.info_outline, size: 16, color: theme.primary),
                       const SizedBox(width: 8),

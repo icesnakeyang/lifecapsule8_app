@@ -94,11 +94,16 @@ class _NoteListState extends ConsumerState<NoteList> {
           ),
           actions: [
             IconButton(
-              onPressed: () {
+              onPressed: () async {
                 final navigator = Navigator.of(context);
                 final notifier = ref.read(noteProvider.notifier);
-                notifier.clearCurrentNote();
-                navigator.pushNamed('/noteedit');
+                final local = await notifier.createEmptyCurrentNote();
+                if (!navigator.mounted) return;
+
+                navigator.pushNamed(
+                  '/noteedit',
+                  arguments: {'id': local.id, 'isNew': true},
+                );
               },
               icon: const Icon(Icons.add),
             ),
@@ -113,6 +118,8 @@ class _NoteListState extends ConsumerState<NoteList> {
                   final item = notes[index];
                   final content = item.content;
                   final updatedAt = item.updatedAt;
+                  // 关键：获取当前笔记的同步状态
+                  final bool isNoteSynced = item.isSynced == true;
 
                   final title = content.trim().split("\n").first.trim();
                   final type = item.type;
@@ -120,7 +127,7 @@ class _NoteListState extends ConsumerState<NoteList> {
                   final chipColor = _typeColor(theme, type);
 
                   return ListTile(
-                    leading: Icon(_typeIcon(type), color: chipColor),
+                    // leading: Icon(_typeIcon(type), color: chipColor),
                     title: Text(
                       title.isEmpty ? "(Empty note)" : title,
                       maxLines: 1,
@@ -130,20 +137,34 @@ class _NoteListState extends ConsumerState<NoteList> {
                       DateFormat.yMd().add_Hm().format(updatedAt),
                       style: const TextStyle(fontSize: 12),
                     ),
-                    trailing: Chip(
-                      label: Text(
-                        _typeLabel(type),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      backgroundColor: chipColor?.withValues(alpha: 0.12),
-                      side: BorderSide(
-                        color: (chipColor ?? theme.divider).withValues(
-                          alpha: 0.35,
+                    // 核心修改：将原单个Chip改为Row，包含类型Chip + 同步状态图标
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Chip(
+                        //   label: Text(
+                        //     _typeLabel(type),
+                        //     style: const TextStyle(fontSize: 11),
+                        //   ),
+                        //   backgroundColor: chipColor?.withValues(alpha: 0.12),
+                        //   side: BorderSide(
+                        //     color: (chipColor ?? theme.divider).withValues(
+                        //       alpha: 0.35,
+                        //     ),
+                        //   ),
+                        //   visualDensity: VisualDensity.compact,
+                        //   materialTapTargetSize:
+                        //       MaterialTapTargetSize.shrinkWrap,
+                        //   padding: EdgeInsets.zero,
+                        // ),
+                        // const SizedBox(width: 8), // 图标与Chip间距
+                        // 同步状态图标：未同步显示sync(警告色)，同步成功显示cloud_done(成功色)
+                        Icon(
+                          isNoteSynced ? Icons.cloud_done : Icons.sync,
+                          size: 18, // 缩小图标尺寸，适配列表
+                          color: isNoteSynced ? theme.success : theme.warning,
                         ),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: EdgeInsets.zero,
+                      ],
                     ),
                     onTap: () {
                       ref

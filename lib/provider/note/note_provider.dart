@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
@@ -25,13 +26,16 @@ class NoteNotifier extends Notifier<NoteState> {
   Uint8List? get _masterKey => ref.read(cryptoProvider.notifier).masterKey;
 
   bool _syncing = false;
+  bool _forceClearCurrent = false;
 
   // -------------------------
   // Public helpers used by UI
   // -------------------------
 
-  void clearCurrentNote() {
+  Future<void> clearCurrentNote() async {
+    _forceClearCurrent = true;
     state = state.copyWith(currentNote: null);
+    await Future.delayed(Duration.zero);
   }
 
   void setCurrentNoteById(String id) {
@@ -58,17 +62,21 @@ class NoteNotifier extends Notifier<NoteState> {
           }
           map['content'] = content;
         }
-        debugPrint(
-          'HIVE isSynced raw=${map['isSynced']} type=${map['isSynced']?.runtimeType}',
-        );
         final fresh = LocalNote.fromJson(map);
-        debugPrint('LocalNote.isSynced parsed=${fresh.isSynced}');
         state = state.copyWith(currentNote: fresh);
         return;
       } catch (_) {}
     }
     final found = state.notes.where((n) => n.id == id).toList();
-    state = state.copyWith(currentNote: found.isEmpty ? null : found.first);
+    if (found.isNotEmpty) {
+      state = state.copyWith(currentNote: found.first);
+      return;
+    }
+    final cur = state.currentNote;
+    if (cur != null && cur.id == id) {
+      return;
+    }
+    state = state.copyWith(currentNote: null);
   }
 
   bool isNoteEncrypted(String noteId) {
@@ -389,16 +397,20 @@ class NoteNotifier extends Notifier<NoteState> {
 
     final prev = stateOrNull;
     LocalNote? nextCurrent;
-    final prevId = prev?.currentNote?.id;
-    if (prevId != null) {
-      for (final n in notes) {
-        if (n.id == prevId) {
-          nextCurrent = n;
-          break;
+    if (_forceClearCurrent) {
+      nextCurrent = null;
+    } else {
+      final prevId = prev?.currentNote?.id;
+      if (prevId != null) {
+        for (final n in notes) {
+          if (n.id == prevId) {
+            nextCurrent = n;
+            break;
+          }
         }
       }
+      nextCurrent ??= (notes.isNotEmpty ? notes.first : null);
     }
-    nextCurrent ??= (notes.isNotEmpty ? notes.first : null);
 
     return prev == null
         ? NoteState(notes: notes, currentNote: nextCurrent)
