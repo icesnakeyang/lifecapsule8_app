@@ -14,6 +14,7 @@ class ApiClient {
   );
 
   static Future<void> init() async {
+    print('🚀 当前使用的 baseUrl: ${AppConfig.baseUrl}');  // <--- 加这行
     final prefs = await SharedPreferences.getInstance();
 
     _dio.interceptors.clear();

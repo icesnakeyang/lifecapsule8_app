@@ -23,12 +23,13 @@ void main() async {
   await HiveSetup.init();
 
   // await HiveSetup.clearHive();
-  // final prefs = await SharedPreferences.getInstance();
+  final prefs = await SharedPreferences.getInstance();
   // prefs.remove('launch_count');
   // prefs.remove('app_locale_code');
   // prefs.remove('local_user_info');
   // prefs.remove('flutter.app_theme_id');
   // prefs.remove('lifecapsule_device_id');
+  // prefs.remove('private_note_entry_count');
 
   await ApiClient.init();
   runApp(const ProviderScope(child: LifeCapsuleApp()));
@@ -42,6 +43,7 @@ class LifeCapsuleApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentLocale = ref.watch(localeProvider);
     final themeData = ref.watch(themeDataProvider);
+
     return ScreenUtilInit(
       designSize: const Size(390, 844),
       minTextAdapt: true,

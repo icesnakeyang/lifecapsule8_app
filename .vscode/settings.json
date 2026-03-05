@@ -1,0 +1,11 @@
+{
+  "dart.env": {
+    "http_proxy": "http://127.0.0.1:10902",
+    "https_proxy": "http://127.0.0.1:10902",
+    "NO_PROXY": "localhost,127.0.0.1"
+  },
+  "terminal.integrated.env.osx": {
+    "http_proxy": "http://127.0.0.1:10902",
+    "https_proxy": "http://127.0.0.1:10902"
+  }
+}

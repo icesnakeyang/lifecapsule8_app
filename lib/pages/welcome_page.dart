@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:lifecapsule8_app/pages/dashboard/home_page.dart';
-import 'package:lifecapsule8_app/provider/app_luanch_provider.dart';
 import 'package:lifecapsule8_app/provider/user/user_provider.dart';
 import 'package:lifecapsule8_app/theme/theme_provider.dart';
 
@@ -45,8 +44,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final launchCount = ref.watch(appLaunchProvider);
-    final isFirstLuanch = launchCount <= 1;
     final theme = ref.watch(themeProvider);
 
     return PopScope(
@@ -90,33 +87,33 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                                 style: TextStyle(
                                   fontFamily: 'Fredoka',
                                   color: theme.primary,
-                                  fontSize: 40.sp,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 46.sp,
+                                  fontWeight: FontWeight.w900,
                                   letterSpacing: 4,
                                 ),
                               ),
                             ),
                             SizedBox(height: 20.h),
 
-                            if (isFirstLuanch)
-                              Text(
-                                "Welcome! Let's begin your LifeCapsule journey.",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 18.sp,
-                                  color: Color(0x99c7bced),
-                                ),
-                              )
-                            else
-                              Text(
-                                "Welcome back. ",
-                                style: TextStyle(
-                                  fontSize: 20.sp,
-                                  // color: const Color.fromARGB(153, 199, 188, 237),
-                                  color: const Color(0x99c7bced),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                            // if (isFirstLuanch)
+                            //   Text(
+                            //     "Welcome! Let's begin your LifeCapsule journey.",
+                            //     textAlign: TextAlign.center,
+                            //     style: TextStyle(
+                            //       fontSize: 18.sp,
+                            //       color: Color(0x99c7bced),
+                            //     ),
+                            //   )
+                            // else
+                            //   Text(
+                            //     "Welcome back. ",
+                            //     style: TextStyle(
+                            //       fontSize: 26.sp,
+                            //       // color: const Color.fromARGB(153, 199, 188, 237),
+                            //       color: const Color(0x99c7bced),
+                            //       fontWeight: FontWeight.w600,
+                            //     ),
+                            //   ),
 
                             const SizedBox(height: 24),
 
@@ -130,10 +127,10 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                                 style: TextStyle(
                                   fontFamily: "Quicksand",
                                   color: Color(0x99B0A2E3),
-                                  fontSize: 18.sp,
+                                  fontSize: 20.sp,
                                   height: 1.5,
                                   letterSpacing: 1.2,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -183,7 +180,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                                         "Start my journey",
                                         style: TextStyle(
                                           fontFamily: "Quicksand",
-                                          fontSize: 20.sp,
+                                          fontSize: 24.sp,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),

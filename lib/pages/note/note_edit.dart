@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lifecapsule8_app/constants/onboarding_keys.dart';
 import 'package:lifecapsule8_app/crypto/crypto_provider.dart';
-import 'package:lifecapsule8_app/provider/app_luanch_provider.dart';
 import 'package:lifecapsule8_app/provider/note/note_provider.dart';
 import 'package:lifecapsule8_app/provider/note/note_state.dart';
 import 'package:lifecapsule8_app/theme/theme_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NoteEdit extends ConsumerStatefulWidget {
   const NoteEdit({super.key});
@@ -20,18 +21,19 @@ class _NoteEditState extends ConsumerState<NoteEdit>
   bool _inited = false;
 
   String? _noteId;
-
-  bool _showTip1 = true;
-  bool _showPrivateInfo = true;
   String _initialText = '';
+
+  // 标记：是否已完成弹窗关闭，用于控制输入框焦点
+  bool _isDialogClosed = false;
+  static const _tipDialogShownKey = 'private_note_tip_dialog_shown';
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController();
     _focusNode = FocusNode();
+    _focusNode.canRequestFocus = false;
   }
 
   @override
@@ -39,9 +41,21 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     super.didChangeDependencies();
     if (_inited) return;
     _inited = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async{
       if (!mounted) return;
-      _initNote();
+      final prefs=await SharedPreferences.getInstance();
+      final section=OnboardingKeys.privateNote;
+      final countKey=OnboardingKeys.entryCountKey(section);
+      int entryCount=prefs.getInt(countKey)??0;
+      entryCount++;
+      await prefs.setInt(countKey, entryCount);
+      final hasShown=prefs.getBool(OnboardingKeys.tipShownKey(section))??false;
+      if(entryCount<=30 && !hasShown){
+        await _showCombinedTipDialog(prefs);
+      }else{
+        _requestInputFocus();
+      }
+      await _initNote();
     });
   }
 
@@ -62,9 +76,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
       _controller.text = '';
       _initialText = '';
       setState(() {});
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _focusNode.canRequestFocus) _focusNode.requestFocus();
-      });
       return;
     }
     if (argId != null && argId.isNotEmpty) {
@@ -85,22 +96,110 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     if (!mounted || current == null) return;
 
     _noteId = current.id;
-    // notifier.setCurrentNoteById(_noteId!);
     current = ref.read(noteProvider).currentNote;
     if (current == null) return;
 
     _controller.text = current.content;
-
     _initialText = _controller.text.trim();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_focusNode.canRequestFocus) {
-        _focusNode.requestFocus();
+    setState(() {});
+  }
+
+  /// 显示合并后的提示弹窗
+  Future<void> _showCombinedTipDialog(SharedPreferences prefs) async {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true, // 点击空白处可关闭
+      builder: (ctx) {
+        final theme = ref.watch(themeProvider);
+        return AlertDialog(
+          backgroundColor: theme.surface2.withValues(alpha: 0.95),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+          title: Row(
+            children: [
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 20,
+                color: theme.primary,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Private Space',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: theme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'This is your private space. '
+            'Write whatever is on your mind. \n\n'
+            'Your note is stored locally, encrypted on the server, '
+            'and will be synced automatically. No one else can read it.\n\n'
+            'You can be completely honest here. Write down your worries, hopes, thoughts or anything you don’t want to lose.',
+            style: TextStyle(
+              fontSize: 16,
+              color: theme.onSurface.withValues(alpha: 0.8),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                // 弹窗关闭后标记状态，并请求输入框焦点
+                _onDialogClosed();
+              },
+              child: Text(
+                'Got it',
+                style: TextStyle(
+                  color: theme.primary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      // 处理点击空白处关闭弹窗的情况
+      if (!_isDialogClosed) {
+        _onDialogClosed();
       }
     });
+  }
 
-    setState(() {});
+  /// 弹窗关闭后的处理逻辑
+  void _onDialogClosed() {
+    if (!mounted) return;
+
+    setState(() {
+      _isDialogClosed = true;
+      // 恢复输入框请求焦点的能力
+      _focusNode.canRequestFocus = true;
+    });
+
+    // 延迟请求焦点，确保弹窗完全关闭后再弹出键盘
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestInputFocus();
+    });
+  }
+
+  /// 统一的焦点请求方法
+  void _requestInputFocus() {
+    if (!mounted || !_focusNode.canRequestFocus) return;
+
+    _focusNode.requestFocus();
   }
 
   @override
@@ -111,7 +210,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
     super.dispose();
   }
 
-  /// 切后台自动保存（同步前置逻辑，保留）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.paused) return;
@@ -138,7 +236,6 @@ class _NoteEditState extends ConsumerState<NoteEdit>
         return;
       }
     }
-    // 保存后自动触发同步，核心同步逻辑保留
     await ref
         .read(noteProvider.notifier)
         .saveOrDeleteNoteById(id, _controller.text);
@@ -147,12 +244,9 @@ class _NoteEditState extends ConsumerState<NoteEdit>
   @override
   Widget build(BuildContext context) {
     final crypto = ref.watch(cryptoProvider);
-    final hasKey = crypto.hasMnemonic && crypto.hasMasterKey;
     final theme = ref.watch(themeProvider);
-    final launchCount = ref.watch(appLaunchProvider);
-    final isFirstLuanch = launchCount <= 10;
+    final hasKey = crypto.hasMnemonic && crypto.hasMasterKey;
 
-    // 保留：同步状态监听，成功后更新基线文本（保证自动保存/同步逻辑正常）
     ref.listen<NoteState>(noteProvider, (prev, next) {
       final n = next.currentNote;
       if (n == null) return;
@@ -243,175 +337,49 @@ class _NoteEditState extends ConsumerState<NoteEdit>
                 },
                 icon: const Icon(Icons.delete),
               ),
-            // 仅删除：同步图标相关UI代码，无其他修改
           ],
         ),
 
+        // 输入区域占满整个页面，无任何提示卡片遮挡
         body: Container(
           color: theme.surface,
-          padding: const EdgeInsets.all(4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              /// 顶部「私密空间」提示卡片（可折叠）
-              if (_showPrivateInfo && isFirstLuanch) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.surface2.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_showPrivateInfo)
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.lock_outline,
-                              size: 18,
-                              color: theme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'This is your private space.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.onSurface,
-                                ),
-                              ),
-                            ),
-                            if (_showPrivateInfo)
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _showPrivateInfo = !_showPrivateInfo;
-                                  });
-                                },
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: Icon(
-                                    Icons.cancel,
-                                    size: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: theme.primary,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      if (_showPrivateInfo) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Write whatever is on your mind. '
-                          'Your note is stored locally, encrypted on the server, '
-                          'and will be synced automatically. No one else can read it.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.onSurface.withValues(alpha: 0.8),
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              /// 中部：编辑区 + 小提示
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  onChanged: (v) {
-                    final id = _noteId;
-                    if (id == null) return;
-                    // 保留：实时更新笔记内容，为同步做准备
-                    ref.read(noteProvider.notifier).updateNoteById(id, v);
-                  },
-                  readOnly: !canEdit,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  style: TextStyle(
-                    color: theme.onSurface.withValues(alpha: 0.9),
-                    fontSize: 18,
-                    height: 1.5,
-                  ),
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.all(4),
-                    filled: false,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: theme.surface, width: 1),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: theme.surface),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: theme.surface),
-                    ),
-                    hintText: 'Write your mind here safely.',
-                    hintMaxLines: 3,
-                    hintStyle: TextStyle(
-                      color: theme.onDescription.withValues(alpha: 0.45),
-                      fontSize: 18,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
+          padding: const EdgeInsets.all(8),
+          child: TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            onChanged: (v) {
+              final id = _noteId;
+              if (id == null) return;
+              ref.read(noteProvider.notifier).updateNoteById(id, v);
+            },
+            readOnly: !canEdit,
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+            // 关键：初始时不自动弹出键盘
+            autofocus: false,
+            style: TextStyle(
+              color: theme.onSurface.withValues(alpha: 0.9),
+              fontSize: 18,
+              height: 1.5,
+            ),
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
               ),
-
-              if (_showTip1 && isFirstLuanch) ...[
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.surface2.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: theme.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'You can be completely honest here. '
-                          'Write down your worries, hopes, thoughts or anything you don’t want to lose.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.onSurface.withValues(alpha: 0.8),
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _showTip1 = false;
-                          });
-                        },
-                        child: Icon(
-                          Icons.cancel,
-                          size: 16,
-                          color: theme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+              filled: false,
+              fillColor: theme.surface2.withValues(alpha: 0.1),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              hintText: 'Write your mind here safely.',
+              hintMaxLines: 3,
+              hintStyle: TextStyle(
+                color: theme.onDescription.withValues(alpha: 0.45),
+                fontSize: 18,
+                height: 1.4,
+              ),
+            ),
           ),
         ),
       ),

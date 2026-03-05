@@ -31,6 +31,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            const SizedBox(height: 32,),
             Align(
               alignment: Alignment.topRight,
               child: Stack(
@@ -38,11 +39,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.pushNamed(context, '/settings'),
-                    icon: Icon(Icons.settings, size: 20),
+                    icon: Icon(Icons.settings, size: 24),
                   ),
                   Positioned(
                     right: 10,
-                    top: 8,
+                    top: 10,
                     child: Container(
                       width: 6,
                       height: 6,
@@ -59,7 +60,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               "LifeCapsule",
               style: TextStyle(
                 color: theme.primary,
-                fontSize: 36,
+                fontSize: 40,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -68,7 +69,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               "Write a letter to the future",
               style: TextStyle(
                 color: theme.primary,
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w500,
                 fontFamily: 'Fredoka',
               ),
@@ -82,11 +83,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                 // 宽度充足（≥ 500）→ 每行3个；宽度中等（≥ 350）→ 每行2个；否则→每行1个
                 final crossAxisCount = constraints.maxWidth >= 600
                     ? 6
-                    : constraints.maxWidth >= 500
+                    : constraints.maxWidth >= 1000
                     ? 5
-                    : constraints.maxWidth >= 400
+                    : constraints.maxWidth >= 700
                     ? 4
-                    : constraints.maxWidth >= 290
+                    : constraints.maxWidth >= 500
                     ? 3
                     : constraints.maxWidth >= 200
                     ? 2
@@ -98,6 +99,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         (crossAxisCount - 1) * 16) // 间距：16px/个
                     /
                     crossAxisCount;
+                final itemHeight=itemWidth*3/4;
 
                 return Wrap(
                   // 水平间距
@@ -106,7 +108,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   runSpacing: 24,
                   // 居中对齐
                   alignment: WrapAlignment.center,
-                  children: [
+                  children: 
+                  [
                     // 1. Notes
                     InkWell(
                       onTap: () {
@@ -115,7 +118,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           image: const DecorationImage(
@@ -162,7 +165,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           image: const DecorationImage(
@@ -213,7 +216,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           image: const DecorationImage(
@@ -259,7 +262,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           image: const DecorationImage(
@@ -306,7 +309,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           image: const DecorationImage(
@@ -350,7 +353,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: itemWidth,
-                        height: 80,
+                        height: itemHeight,
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
