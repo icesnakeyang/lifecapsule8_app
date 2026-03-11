@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_draft_store.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_list_controller.dart';
+import 'package:lifecapsule8_app/features/future_letter/application/future_letter_list_controller.dart';
 import 'package:lifecapsule8_app/features/future_letter/future_letter_route_paths.dart';
 import 'package:lifecapsule8_app/features/home/home_route_paths.dart';
-import 'package:lifecapsule8_app/features/notes_base/application/notes_providers.dart';
 import 'package:lifecapsule8_app/features/notes_base/domain/note_base.dart';
 
 class FutureLetterListPage extends ConsumerStatefulWidget {
@@ -27,12 +25,10 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final asyncS = ref.watch(futureLetterListControllerProvider);
+    final state = ref.watch(futureLetterListControllerProvider);
     final notifier = ref.read(futureLetterListControllerProvider.notifier);
-    final theme = ref.read(appThemeProvider);
+    final theme = ref.watch(appThemeProvider);
     final palette = theme.future;
-
-    final s = asyncS;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -49,6 +45,7 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
         ),
         leading: IconButton(
           onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             Navigator.pushNamedAndRemoveUntil(
               context,
               HomeRoutePaths.home,
@@ -60,18 +57,11 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
         centerTitle: false,
         actions: [
           IconButton(
-            onPressed: () async {
-              final newNoteId = ref
-                  .read(futureLetterDraftStoreProvider.notifier)
-                  .startNewDraft();
-              if (!context.mounted) return;
-              Navigator.pushNamed(
-                context,
-                FutureLetterRoutePaths.write,
-                arguments: {'noteId': newNoteId},
-              );
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              Navigator.pushNamed(context, FutureLetterRoutePaths.write);
             },
-            icon: const Icon(Icons.add, size: 24),
+            icon: Icon(Icons.add, size: 24, color: palette.onPrimary),
           ),
         ],
         bottom: PreferredSize(
@@ -81,7 +71,10 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
             child: TextField(
               controller: _searchCtl,
               textInputAction: TextInputAction.search,
-              onChanged: notifier.setQuery,
+              onChanged: (v) {
+                notifier.setQuery(v);
+                setState(() {});
+              },
               decoration: InputDecoration(
                 fillColor: Colors.transparent,
                 hintText: 'Search...',
@@ -111,9 +104,7 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
             colors: [palette.gradientStart, palette.gradientEnd],
           ),
         ),
-        child: SafeArea(
-          child: _Body(state: s, loading: s.loading),
-        ),
+        child: SafeArea(child: _Body(state: state)),
       ),
     );
   }
@@ -121,53 +112,57 @@ class _FutureLetterListPageState extends ConsumerState<FutureLetterListPage> {
 
 class _Body extends ConsumerWidget {
   final FutureLetterListState state;
-  final bool loading;
 
-  const _Body({required this.state, required this.loading});
+  const _Body({required this.state});
 
   Future<void> _deleteWithUndo(
     BuildContext context,
     WidgetRef ref,
     NoteBase n,
   ) async {
-    final repo = ref.read(notesRepositoryProvider);
     final notifier = ref.read(futureLetterListControllerProvider.notifier);
+    final backup = n;
+    final theme = ref.read(appThemeProvider);
+    final palette = theme.future;
+    final messenger = ScaffoldMessenger.of(context);
 
-    final content = (n.content ?? '').trim();
-    if (content.isEmpty) {
-      await repo.delete(n.id);
-      await notifier.refresh();
-      return;
+    await notifier.delete(n.id);
+    if (!context.mounted) return;
+    messenger.clearSnackBars();
+
+    bool closed = false;
+
+    void closeSnackBarOnce() {
+      if (closed) return;
+      closed = true;
+      messenger.hideCurrentSnackBar();
     }
 
-    // 先保存一份用于撤销
-    final backup = n;
-
-    await repo.markDeleted(n.id);
-    await notifier.refresh();
-
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
-        content: const Text('Deleted'),
+        backgroundColor: palette.accent,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text(
+          'Delete successful',
+          style: TextStyle(color: palette.onPrimary),
+        ),
+        duration: const Duration(seconds: 3),
         action: SnackBarAction(
           label: 'UNDO',
+          textColor: palette.onPrimary,
           onPressed: () async {
-            await repo.upsert(
-              backup.copyWith(
-                isDeleted: false,
-                isSynced: false,
-                updatedAt: DateTime.now(),
-                version: backup.version + 1,
-              ),
-            );
-            await notifier.refresh();
+            await notifier.restore(backup);
+            closeSnackBarOnce();
           },
         ),
       ),
     );
+
+    Future.delayed(const Duration(seconds: 3), () {
+      closeSnackBarOnce();
+    });
   }
 
   Future<void> _confirmDelete(
@@ -187,17 +182,23 @@ class _Body extends ConsumerWidget {
           content: const Text('You can undo right after deleting.'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () {
+                Navigator.pop(ctx, false);
+              },
               child: Text('Cancel', style: TextStyle(color: palette.onPrimary)),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () {
+                Navigator.pop(ctx, true);
+              },
               child: Text('Delete', style: TextStyle(color: palette.onPrimary)),
             ),
           ],
         );
       },
     );
+
+    if (!context.mounted) return;
 
     if (ok == true) {
       await _deleteWithUndo(context, ref, n);
@@ -206,11 +207,11 @@ class _Body extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (loading) {
+    if (state.loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (state.error != null && (state.items.isEmpty)) {
+    if (state.error != null && state.items.isEmpty) {
       return _ErrorState(msg: state.error!);
     }
 
@@ -218,6 +219,7 @@ class _Body extends ConsumerWidget {
     if (items.isEmpty) {
       return const _EmptyState();
     }
+
     final theme = ref.read(appThemeProvider);
     final palette = theme.future;
 
@@ -227,7 +229,7 @@ class _Body extends ConsumerWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         final n = items[i];
-        final content = (n.content ?? '').toString().trim();
+        final content = (n.content ?? '').trim();
         final displaySubtitle = 'Updated: ${_fmt(n.updatedAt)}';
 
         return Material(
@@ -236,13 +238,14 @@ class _Body extends ConsumerWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
               Navigator.pushNamed(
                 context,
                 FutureLetterRoutePaths.write,
                 arguments: {'noteId': n.id},
               );
             },
-            onLongPress: () => _confirmDelete(context, ref, n), // ✅ 长按删除
+            onLongPress: () => _confirmDelete(context, ref, n),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -314,7 +317,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Tap “New” to create your first one.',
+              'Tap “+” to create your first one.',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: Theme.of(

@@ -136,7 +136,7 @@ class _LastWishesIntroPageState extends ConsumerState<LastWishesIntroPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'Last Wishes2',
+          'Last Wishes',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,

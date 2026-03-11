@@ -2,28 +2,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lifecapsule8_app/app/theme/app_theme.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_draft_store.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_preview_controller.dart';
+import 'package:lifecapsule8_app/features/future_letter/application/future_letter_draft_controller.dart';
 import 'package:lifecapsule8_app/features/future_letter/future_letter_route_paths.dart';
 
 class FutureLetterPreviewPage extends ConsumerWidget {
   final String noteId;
+
   const FutureLetterPreviewPage({super.key, required this.noteId});
+
+  DateTime? _parseLocal(String? iso) {
+    final v = (iso ?? '').trim();
+    if (v.isEmpty) return null;
+    final dt = DateTime.tryParse(v);
+    if (dt == null) return null;
+    return dt.toLocal();
+  }
+
+  String _buildScheduleText(FutureLetterDraftState state) {
+    final dt = _parseLocal(state.draft.sendAtIso);
+    if (dt == null) return '-';
+    return dt.toString();
+  }
+
+  String _buildRecipientText(FutureLetterDraftState state) {
+    final userCode = (state.draft.userCode ?? '').trim();
+    final email = (state.draft.email ?? '').trim();
+
+    if (userCode.isEmpty && email.isEmpty) return '-';
+    if (userCode.isNotEmpty && email.isNotEmpty) {
+      return 'UserCode: $userCode\nEmail: $email';
+    }
+    if (userCode.isNotEmpty) return 'UserCode: $userCode';
+    return 'Email: $email';
+  }
+
+  String _buildNamesText(FutureLetterDraftState state) {
+    final toName = (state.draft.toName ?? '').trim();
+    final fromName = (state.draft.fromName ?? '').trim();
+    return 'To: ${toName.isEmpty ? '-' : toName}\nFrom: ${fromName.isEmpty ? '-' : fromName}';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(appThemeProvider);
     final palette = theme.future;
-    final asyncS = ref.watch(futureLetterPreviewControllerProvider);
-    final controller = ref.read(futureLetterPreviewControllerProvider.notifier);
 
-    final s = asyncS.value;
+    final state = ref.watch(futureLetterDraftControllerProvider(noteId));
+    final controller = ref.read(
+      futureLetterDraftControllerProvider(noteId).notifier,
+    );
+
+    final scheduleText = _buildScheduleText(state);
+    final recipientText = _buildRecipientText(state);
+    final namesText = _buildNamesText(state);
+    final contentText = state.draft.content.trim();
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        await controller.persistBeforeLeave();
+        await controller.persist();
         if (context.mounted) Navigator.of(context).pop(result);
       },
       child: Scaffold(
@@ -44,12 +82,11 @@ class FutureLetterPreviewPage extends ConsumerWidget {
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: palette.onPrimary),
             onPressed: () async {
-              await controller.persistBeforeLeave();
+              await controller.persist();
               if (context.mounted) Navigator.pop(context);
             },
           ),
           centerTitle: false,
-          actions: [],
         ),
         body: Stack(
           children: [
@@ -66,7 +103,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
             ),
             SafeArea(
               bottom: false,
-              child: asyncS.isLoading
+              child: state.loading
                   ? const Center(child: CircularProgressIndicator())
                   : Column(
                       children: [
@@ -76,7 +113,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                if ((s?.error ?? '').trim().isNotEmpty)
+                                if ((state.error ?? '').trim().isNotEmpty)
                                   Container(
                                     padding: const EdgeInsets.all(14),
                                     margin: const EdgeInsets.only(bottom: 14),
@@ -102,7 +139,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Text(
-                                            s!.error!,
+                                            state.error!,
                                             style: TextStyle(
                                               color: theme.onError,
                                               fontWeight: FontWeight.w700,
@@ -112,7 +149,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                       ],
                                     ),
                                   ),
-                                // 主卡片
+
                                 Container(
                                   padding: const EdgeInsets.all(18),
                                   decoration: BoxDecoration(
@@ -156,21 +193,21 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                       _InfoRow(
                                         icon: Icons.schedule_rounded,
                                         title: 'Schedule',
-                                        value: s?.scheduleText ?? '-',
+                                        value: scheduleText,
                                         theme: theme,
                                       ),
                                       const SizedBox(height: 10),
                                       _InfoRow(
                                         icon: Icons.alternate_email_rounded,
                                         title: 'Recipient',
-                                        value: s?.recipientText ?? '-',
+                                        value: recipientText,
                                         theme: theme,
                                       ),
                                       const SizedBox(height: 10),
                                       _InfoRow(
                                         icon: Icons.badge_outlined,
                                         title: 'Names',
-                                        value: s?.namesText ?? '-',
+                                        value: namesText,
                                         theme: theme,
                                       ),
 
@@ -201,10 +238,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                                 .withValues(alpha: 0.10),
                                           ),
                                         ),
-                                        child:
-                                            (s?.contentText ?? '')
-                                                .trim()
-                                                .isEmpty
+                                        child: contentText.isEmpty
                                             ? Text(
                                                 'No content yet.',
                                                 style: TextStyle(
@@ -214,7 +248,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                                 ),
                                               )
                                             : SelectableText(
-                                                s!.contentText,
+                                                contentText,
                                                 style: TextStyle(
                                                   color: theme.future.onPrimary,
                                                   height: 1.55,
@@ -229,7 +263,6 @@ class FutureLetterPreviewPage extends ConsumerWidget {
 
                                 const SizedBox(height: 14),
 
-                                // 轻提示
                                 Container(
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
@@ -272,17 +305,9 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                 SizedBox(
                                   height: 54,
                                   child: FilledButton(
-                                    onPressed:
-                                        (s == null || s.loading || s.submitting)
+                                    onPressed: state.loading || state.submitting
                                         ? null
                                         : () async {
-                                            final d = ref
-                                                .read(
-                                                  futureLetterDraftStoreProvider,
-                                                )
-                                                .current;
-                                            final noteId = d?.noteId;
-
                                             try {
                                               await controller.confirmAndSend();
                                               if (!context.mounted) return;
@@ -321,7 +346,7 @@ class FutureLetterPreviewPage extends ConsumerWidget {
                                         borderRadius: BorderRadius.circular(16),
                                       ),
                                     ),
-                                    child: (s != null && s.submitting)
+                                    child: state.submitting
                                         ? const SizedBox(
                                             width: 22,
                                             height: 22,
@@ -429,41 +454,6 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final dynamic theme;
-  const _Chip({required this.icon, required this.text, required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = theme.future;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: p.onPrimary.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: p.onPrimary.withValues(alpha: 0.8)),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: p.onPrimary.withValues(alpha: 0.85),
-              fontWeight: FontWeight.w800,
-              fontSize: 12.5,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

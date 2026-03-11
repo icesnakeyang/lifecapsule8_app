@@ -1,72 +1,47 @@
+// lib/features/future_letter/domain/future_letter_draft.dart
 class FutureLetterDraft {
-  const FutureLetterDraft({
-    required this.noteId,
-    required this.updatedAt,
-    required this.content,
-
-    // recipient
-    this.userCode,
-    this.userId,
-    this.nickname,
-    this.email,
-    this.toName,
-    this.fromName,
-
-    // schedule (UTC ISO8601)
-    this.sendAtIso,
-  });
-
   final String noteId;
-  final DateTime updatedAt;
-
   final String content;
-
-  // Recipient
+  final String? sendAtIso;
   final String? userCode;
-  final String? userId;
-  final String? nickname;
   final String? email;
   final String? toName;
   final String? fromName;
+  final DateTime updatedAt;
 
-  // Schedule
-  /// 必须是 UTC ISO8601 string
-  final String? sendAtIso;
+  const FutureLetterDraft({
+    required this.noteId,
+    required this.content,
+    required this.updatedAt,
+    this.sendAtIso,
+    this.userCode,
+    this.email,
+    this.toName,
+    this.fromName,
+  });
 
   FutureLetterDraft copyWith({
-    DateTime? updatedAt,
+    String? noteId,
     String? content,
-
+    String? sendAtIso,
     String? userCode,
-    String? userId,
-    String? nickname,
     String? email,
     String? toName,
     String? fromName,
-
-    String? sendAtIso,
-
-    bool clearRecipient = false,
-    bool clearSendAt = false,
-    bool clearEmail = false,
-    bool clearToName = false,
-    bool clearFromName = false,
+    DateTime? updatedAt,
   }) {
     return FutureLetterDraft(
-      noteId: noteId,
-      updatedAt: updatedAt ?? this.updatedAt,
+      noteId: noteId ?? this.noteId,
       content: content ?? this.content,
-
-      userCode: clearRecipient ? null : (userCode ?? this.userCode),
-      userId: clearRecipient ? null : (userId ?? this.userId),
-      nickname: clearRecipient ? null : (nickname ?? this.nickname),
-      email: (clearRecipient || clearEmail) ? null : (email ?? this.email),
-      toName: (clearRecipient || clearToName) ? null : (toName ?? this.toName),
-      fromName: (clearRecipient || clearFromName)
-          ? null
-          : (fromName ?? this.fromName),
-
-      sendAtIso: clearSendAt ? null : (sendAtIso ?? this.sendAtIso),
+      sendAtIso: sendAtIso ?? this.sendAtIso,
+      userCode: userCode ?? this.userCode,
+      email: email ?? this.email,
+      toName: toName ?? this.toName,
+      fromName: fromName ?? this.fromName,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  bool get hasRecipient =>
+      (userCode ?? '').trim().isNotEmpty || (email ?? '').trim().isNotEmpty;
 }

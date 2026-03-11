@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lifecapsule8_app/app/i18n/locale_provider.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
 import 'package:lifecapsule8_app/core/utils/date_time_utils.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_schedule_controller.dart';
+import 'package:lifecapsule8_app/features/future_letter/application/future_letter_draft_controller.dart';
 import 'package:lifecapsule8_app/features/future_letter/future_letter_route_paths.dart';
 
 class FutureLetterSchedulePage extends ConsumerWidget {
   final String noteId;
+
   const FutureLetterSchedulePage({super.key, required this.noteId});
+
   Future<DateTime?> _pickDateTime(
     BuildContext context,
     WidgetRef ref,
@@ -60,29 +62,38 @@ class FutureLetterSchedulePage extends ConsumerWidget {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
+  DateTime? _parsePickedLocal(String? sendAtIso) {
+    final iso = (sendAtIso ?? '').trim();
+    if (iso.isEmpty) return null;
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return null;
+    return dt.toLocal();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(appThemeProvider);
     final locale = ref.watch(localeProvider).toString();
-    final asyncState = ref.watch(futureLetterScheduleControllerProvider);
+
+    final state = ref.watch(futureLetterDraftControllerProvider(noteId));
     final controller = ref.read(
-      futureLetterScheduleControllerProvider.notifier,
+      futureLetterDraftControllerProvider(noteId).notifier,
     );
 
-    final s = asyncState.value;
-    final picked = s?.pickedLocal;
+    final palette = theme.future;
+    final picked = _parsePickedLocal(state.draft.sendAtIso);
 
     final pickedText = picked == null
         ? 'Not set'
-        : DateFormatter.formatDateTime(picked, locale);
+        : DateFormatter.dateTime(picked, locale: locale);
 
-    final palette = theme.future;
+    final canNext = picked != null && !state.loading && !state.saving;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        await controller.persistBeforeLeave();
+        await controller.persist();
         if (context.mounted) Navigator.of(context).pop(result);
       },
       child: Scaffold(
@@ -103,32 +114,41 @@ class FutureLetterSchedulePage extends ConsumerWidget {
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: theme.future.onPrimary),
             onPressed: () async {
-              await controller.persistBeforeLeave();
+              await controller.persist();
               if (context.mounted) Navigator.pop(context);
             },
           ),
           centerTitle: false,
           actions: [
             TextButton(
-              onPressed: (s == null || !controller.canNext)
-                  ? null
-                  : () async {
-                      await controller.persistBeforeLeave();
+              onPressed: canNext
+                  ? () async {
+                      await controller.persist();
                       if (!context.mounted) return;
                       Navigator.pushNamed(
                         context,
                         FutureLetterRoutePaths.recipient,
                         arguments: {'noteId': noteId},
                       );
-                    },
-              child: Text(
-                'Next',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: theme.future.onPrimary,
-                  fontSize: 16,
-                ),
-              ),
+                    }
+                  : null,
+              child: state.saving
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.future.onPrimary,
+                      ),
+                    )
+                  : Text(
+                      'Next',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: theme.future.onPrimary,
+                        fontSize: 16,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -141,7 +161,7 @@ class FutureLetterSchedulePage extends ConsumerWidget {
             ),
           ),
           child: SafeArea(
-            child: asyncState.isLoading
+            child: state.loading
                 ? const Center(child: CircularProgressIndicator())
                 : Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -169,7 +189,8 @@ class FutureLetterSchedulePage extends ConsumerWidget {
                         ),
                         const SizedBox(height: 14),
 
-                        if (s?.error != null && (s!.error!).trim().isNotEmpty)
+                        if (state.error != null &&
+                            state.error!.trim().isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.only(bottom: 12),
@@ -178,7 +199,7 @@ class FutureLetterSchedulePage extends ConsumerWidget {
                               color: theme.error.withValues(alpha: 0.85),
                             ),
                             child: Text(
-                              s.error!,
+                              state.error!,
                               style: TextStyle(color: theme.onError),
                             ),
                           ),
@@ -189,7 +210,6 @@ class FutureLetterSchedulePage extends ConsumerWidget {
                             color: palette.accent.withValues(alpha: .5),
                             borderRadius: BorderRadius.circular(16),
                           ),
-
                           child: ListTile(
                             title: Text(
                               'Send at',
@@ -204,7 +224,9 @@ class FutureLetterSchedulePage extends ConsumerWidget {
                             subtitle: Text(
                               pickedText,
                               style: TextStyle(
-                                color: theme.future.onPrimary.withOpacity(0.85),
+                                color: theme.future.onPrimary.withValues(
+                                  alpha: 0.85,
+                                ),
                                 fontSize: 16,
                               ),
                             ),
@@ -216,7 +238,9 @@ class FutureLetterSchedulePage extends ConsumerWidget {
                                   picked,
                                 );
                                 if (dt == null) return;
-                                controller.setPickedLocal(dt);
+                                controller.setSchedule(
+                                  dt.toUtc().toIso8601String(),
+                                );
                               },
                               child: Icon(
                                 Icons.calendar_today_rounded,
@@ -247,12 +271,4 @@ class FutureLetterSchedulePage extends ConsumerWidget {
       ),
     );
   }
-}
-
-DateTime _addMonthsSafe(DateTime dt, int months) {
-  final y = dt.year + ((dt.month - 1 + months) ~/ 12);
-  final m = ((dt.month - 1 + months) % 12) + 1;
-  final lastDay = DateTime(y, m + 1, 0).day;
-  final d = dt.day > lastDay ? lastDay : dt.day;
-  return DateTime(y, m, d, dt.hour, dt.minute);
 }

@@ -95,7 +95,7 @@ class CryptoSettingPage extends ConsumerWidget {
                         if (st.createdAt != null) ...[
                           const SizedBox(height: 10),
                           Text(
-                            'Created at: ${DateFormatter.formatDateTime(st.createdAt!, locale)}',
+                            'Created at: ${DateFormatter.dateTime(st.createdAt!, locale: locale)}',
                             style: TextStyle(color: Colors.grey.shade500),
                           ),
                         ],

@@ -98,7 +98,7 @@ class _PrivateNoteEditPageState extends ConsumerState<PrivateNoteEditPage>
     await prefs.setInt(countKey, entryCount);
 
     // 规则：前 30 次进入、且未展示过，显示提示
-    if (entryCount <= 300) {
+    if (entryCount <= 3) {
       _focusNode.canRequestFocus = false;
       _isDialogClosed = false;
       await _showCombinedTipDialog(prefs, tipKey);
@@ -176,7 +176,8 @@ class _PrivateNoteEditPageState extends ConsumerState<PrivateNoteEditPage>
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () => Navigator.of(ctx,rootNavigator: true).pop(),
+                      onPressed: () =>
+                          Navigator.of(ctx, rootNavigator: true).pop(),
                       child: Text(
                         'Got it',
                         style: TextStyle(
@@ -274,32 +275,7 @@ class _PrivateNoteEditPageState extends ConsumerState<PrivateNoteEditPage>
                 if (!context.mounted) return;
                 Navigator.of(context).pushNamed(PrivateNoteRoutePaths.list);
               },
-              icon: Icon(Icons.list_alt, color: theme.privateNote.primary),
-            ),
-            TextButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      await _saveOnce();
-                      if (!context.mounted) {
-                        return;
-                      }
-                      Navigator.pushNamed(context, PrivateNoteRoutePaths.list);
-                    },
-              child: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      'Done',
-                      style: TextStyle(
-                        fontSize: 17,
-                        color: theme.privateNote.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+              icon: Icon(Icons.list, color: theme.privateNote.onPrimary),
             ),
           ],
         ),

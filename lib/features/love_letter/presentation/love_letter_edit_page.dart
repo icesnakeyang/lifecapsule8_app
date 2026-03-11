@@ -312,6 +312,7 @@ class _LoveLetterEditPageState extends ConsumerState<LoveLetterEditPage>
                 ),
                 decoration: InputDecoration(
                   isCollapsed: true, // 🔥 关键：移除默认 padding
+
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -321,6 +322,7 @@ class _LoveLetterEditPageState extends ConsumerState<LoveLetterEditPage>
 
                   contentPadding: EdgeInsets.zero,
                   fillColor: Colors.transparent,
+                  filled: false,
 
                   hintText:
                       'Dear...\n\n'

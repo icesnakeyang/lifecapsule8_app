@@ -276,8 +276,8 @@ class AppTheme {
 
     privateNote: ScenePalette(
       primary: Color(0xFF5B8CFF),
-      accent: Color(0xFF3CCF91),
-      onPrimary: Color(0xFF061230),
+      accent: Color(0xFF41518C),
+      onPrimary: Colors.white,
       onSurfaceDim: Color(0xB3FFFFFF),
       gradientStart: Color(0x664F7EF7),
       gradientEnd: Color(0xFF0F1426),

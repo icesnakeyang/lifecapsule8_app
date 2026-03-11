@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:lifecapsule8_app/app/theme/app_theme.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
-import 'package:lifecapsule8_app/features/last_wishes/application/last_wishes_preview_controller.dart';
+import 'package:lifecapsule8_app/features/home/home_route_paths.dart';
+import 'package:lifecapsule8_app/features/last_wishes/application/controllers/last_wishes_controller.dart';
 import 'package:lifecapsule8_app/features/last_wishes/last_wishes_route_paths.dart';
 
 class LastWishesPreviewPage extends ConsumerStatefulWidget {
@@ -17,37 +18,31 @@ class LastWishesPreviewPage extends ConsumerStatefulWidget {
 }
 
 class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
-  bool _inited = false;
+  String? _resolvedNoteId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_inited) return;
-    _inited = true;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final notifier = ref.read(lastWishesPreviewControllerProvider.notifier);
+    if (_resolvedNoteId != null) return;
 
-      String? noteId = widget.noteId;
+    String? noteId = widget.noteId;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (noteId == null && args is Map) {
+      noteId = args['noteId'] as String?;
+    }
 
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (noteId == null && args is Map) {
-        noteId = args['noteId'] as String?;
-      }
-
-      notifier.setNoteId(noteId);
-      await notifier.refresh();
-    });
+    _resolvedNoteId = (noteId == null || noteId.trim().isEmpty)
+        ? 'last_wishes'
+        : noteId.trim();
   }
 
   @override
   Widget build(BuildContext context) {
-    final asyncState = ref.watch(lastWishesPreviewControllerProvider);
+    final noteId = _resolvedNoteId ?? 'last_wishes';
+    final asyncState = ref.watch(lastWishesControllerProvider(noteId));
+    final notifier = ref.read(lastWishesControllerProvider(noteId).notifier);
     final theme = ref.read(appThemeProvider);
-    final routeArgs = ModalRoute.of(context)?.settings.arguments;
-    final resolvedNoteId =
-        widget.noteId ??
-        (routeArgs is Map ? routeArgs['noteId'] as String? : null);
     final palette = theme.wishes;
     final on = palette.onPrimary;
 
@@ -100,14 +95,11 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
         ),
       ),
       data: (s) {
-        final notifier = ref.read(lastWishesPreviewControllerProvider.notifier);
-
         final content = s.content.trim();
-        final email = s.recipientEmail.trim();
+        final email = s.email.trim();
         final years = s.waitingYears;
         final note = s.messageNote.trim();
-
-        final canConfirm = !s.enabled && notifier.canConfirm && !s.submitting;
+        final canConfirm = s.canConfirm;
 
         return PopScope(
           canPop: !s.submitting,
@@ -134,6 +126,26 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                 icon: const Icon(Icons.arrow_back_rounded),
                 onPressed: s.submitting ? null : () => Navigator.pop(context),
               ),
+              actions: [
+                if (s.enabled)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        HomeRoutePaths.home,
+                        (route) => false,
+                      );
+                    },
+                    child: Text(
+                      'Home',
+                      style: TextStyle(
+                        color: palette.onPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             body: Container(
               decoration: BoxDecoration(
@@ -153,7 +165,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                       _ErrorBanner(message: s.error!, theme: theme),
                       const SizedBox(height: 12),
                     ],
-
                     Text(
                       'Review before enabling delivery',
                       style: TextStyle(
@@ -172,7 +183,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 14),
-
                     _SectionCard(
                       title: 'Your Words',
                       icon: Icons.format_quote_rounded,
@@ -183,7 +193,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     _SectionCard(
                       title: 'Recipient',
                       icon: Icons.alternate_email_rounded,
@@ -195,7 +204,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     _SectionCard(
                       title: 'Waiting Period',
                       icon: Icons.hourglass_bottom_rounded,
@@ -209,7 +217,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     _SectionCard(
                       title: 'Message Note',
                       icon: Icons.sticky_note_2_rounded,
@@ -219,13 +226,9 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                         theme: theme,
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     _InfoBox(theme: theme),
-
                     const SizedBox(height: 18),
-
                     if (!s.enabled) ...[
                       SizedBox(
                         height: 52,
@@ -277,11 +280,14 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                                         context,
                                         LastWishesRoutePaths.done,
                                         (route) => false,
+                                        arguments: {'noteId': noteId},
                                       );
                                     } else {
                                       final msg = ref
                                           .read(
-                                            lastWishesPreviewControllerProvider,
+                                            lastWishesControllerProvider(
+                                              noteId,
+                                            ),
                                           )
                                           .value
                                           ?.error;
@@ -322,7 +328,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 10),
                       Text(
                         'You can always edit this later before it is delivered.',
@@ -333,7 +338,6 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                         ),
                       ),
                     ] else ...[
-                      // ✅ enabled=true：不显示 Enabled 按钮，改成操作入口（这里给一个 Edit）
                       SizedBox(
                         height: 52,
                         width: double.infinity,
@@ -368,7 +372,7 @@ class _LastWishesPreviewPageState extends ConsumerState<LastWishesPreviewPage> {
                                     Navigator.pushNamed(
                                       context,
                                       LastWishesRoutePaths.edit,
-                                      arguments: {'noteId': resolvedNoteId},
+                                      arguments: {'noteId': noteId},
                                     );
                                   },
                             child: Text(

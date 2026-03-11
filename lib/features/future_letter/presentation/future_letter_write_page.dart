@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_draft_store.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_list_controller.dart';
-import 'package:lifecapsule8_app/features/future_letter/appication/future_letter_write_controller.dart';
+import 'package:lifecapsule8_app/features/future_letter/application/future_letter_draft_controller.dart';
+import 'package:lifecapsule8_app/features/future_letter/application/future_letter_list_controller.dart';
 import 'package:lifecapsule8_app/features/future_letter/future_letter_route_paths.dart';
+import 'package:lifecapsule8_app/features/notes_base/domain/note_id.dart';
 
 class FutureLetterWritePage extends ConsumerStatefulWidget {
   final String? noteId;
@@ -17,34 +17,29 @@ class FutureLetterWritePage extends ConsumerStatefulWidget {
 }
 
 class _FutureLetterWritePageState extends ConsumerState<FutureLetterWritePage> {
+  late final String noteId;
+
   final _textCtrl = TextEditingController();
   final _focusNode = FocusNode();
 
-  bool _hydrated = false;
+  bool _isHydrating = false;
+  String? _lastHydratedContent;
 
   @override
   void initState() {
     super.initState();
+    noteId = widget.noteId ?? NoteId.newFutureLetter();
 
-    // ✅ 输入只更新内存（DraftStore current）
     _textCtrl.addListener(() {
-      if (!_hydrated) return;
+      if (_isHydrating) return;
+
       ref
-          .read(futureLetterWriteControllerProvider.notifier)
-          .setContentInMemory(_textCtrl.text);
-      setState(() {}); // 只用于 Next enable
-    });
+          .read(futureLetterDraftControllerProvider(noteId).notifier)
+          .setContent(_textCtrl.text);
 
-    // ✅ 首帧后 hydrate（避免 build 期间 setText）
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final cur = await ref
-          .read(futureLetterWriteControllerProvider.notifier)
-          .open(noteId: widget.noteId);
-      if (!mounted) return;
-
-      _textCtrl.text = cur.content;
-      _hydrated = true;
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -56,30 +51,44 @@ class _FutureLetterWritePageState extends ConsumerState<FutureLetterWritePage> {
   }
 
   Future<void> _persistOnExitOrNext() async {
-    // 兜底：把 controller 最新值写回内存（避免漏最后一次输入）
-    ref
-        .read(futureLetterWriteControllerProvider.notifier)
-        .setContentInMemory(_textCtrl.text);
+    final controller = ref.read(
+      futureLetterDraftControllerProvider(noteId).notifier,
+    );
+    controller.setContent(_textCtrl.text);
+    await controller.persist();
+  }
 
-    // ✅ 统一交给 controller -> DraftStore.persistNowIfNeeded()
-    await ref
-        .read(futureLetterWriteControllerProvider.notifier)
-        .persistBeforeLeave();
+  void _syncTextIfNeeded(String content) {
+    if (_textCtrl.text == content && _lastHydratedContent == content) return;
+
+    _isHydrating = true;
+    final selection = _textCtrl.selection;
+
+    _textCtrl.value = TextEditingValue(
+      text: content,
+      selection: selection.isValid
+          ? selection.copyWith(
+              baseOffset: selection.baseOffset.clamp(0, content.length),
+              extentOffset: selection.extentOffset.clamp(0, content.length),
+            )
+          : TextSelection.collapsed(offset: content.length),
+    );
+
+    _lastHydratedContent = content;
+    _isHydrating = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 触发 write controller build（确保 ensureCurrentInMemory 在 provider 生命周期里跑）
-    ref.watch(futureLetterWriteControllerProvider);
-
+    final state = ref.watch(futureLetterDraftControllerProvider(noteId));
     final theme = ref.watch(appThemeProvider);
-    final palette = theme.future;
 
-    // ✅ DraftStore 是 State（不是 AsyncValue）
-    final store = ref.watch(futureLetterDraftStoreProvider);
-    final cur = store.current;
+    if (!state.loading) {
+      _syncTextIfNeeded(state.draft.content);
+    }
 
-    final canNext = _textCtrl.text.trim().isNotEmpty;
+    final canNext =
+        _textCtrl.text.trim().isNotEmpty && !state.loading && !state.saving;
 
     return PopScope(
       canPop: false,
@@ -127,7 +136,9 @@ class _FutureLetterWritePageState extends ConsumerState<FutureLetterWritePage> {
               icon: Icon(Icons.list, size: 24, color: theme.future.onPrimary),
               onPressed: () async {
                 await _persistOnExitOrNext();
-                await ref.read(futureLetterListControllerProvider.notifier).refresh();
+                await ref
+                    .read(futureLetterListControllerProvider.notifier)
+                    .refresh();
                 if (!context.mounted) return;
                 Navigator.pushNamed(context, FutureLetterRoutePaths.list);
               },
@@ -140,24 +151,33 @@ class _FutureLetterWritePageState extends ConsumerState<FutureLetterWritePage> {
                       Navigator.pushNamed(
                         context,
                         FutureLetterRoutePaths.schedule,
-                        arguments: {'noteId': cur!.noteId},
+                        arguments: {'noteId': noteId},
                       );
                     }
                   : null,
-              child: Text(
-                'Next',
-                style: TextStyle(
-                  color: canNext
-                      ? theme.future.onPrimary
-                      : theme.future.onPrimary.withValues(alpha: 0.5),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: state.saving
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.future.onPrimary,
+                      ),
+                    )
+                  : Text(
+                      'Next',
+                      style: TextStyle(
+                        color: canNext
+                            ? theme.future.onPrimary
+                            : theme.future.onPrimary.withValues(alpha: 0.5),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ],
         ),
-        body: cur == null
+        body: state.loading
             ? const Center(child: CircularProgressIndicator())
             : Container(
                 decoration: BoxDecoration(
@@ -173,12 +193,26 @@ class _FutureLetterWritePageState extends ConsumerState<FutureLetterWritePage> {
                 child: SafeArea(
                   child: Column(
                     children: [
+                      if (state.error != null && state.error!.trim().isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.error.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(color: theme.onError),
+                          ),
+                        ),
                       Expanded(
                         child: TextField(
                           controller: _textCtrl,
+                          focusNode: _focusNode,
                           maxLines: null,
                           expands: true,
-                          focusNode: _focusNode,
                           textAlignVertical: TextAlignVertical.top,
                           style: TextStyle(
                             fontSize: 18,

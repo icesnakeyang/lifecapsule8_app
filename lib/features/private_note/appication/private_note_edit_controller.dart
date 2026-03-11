@@ -144,11 +144,8 @@ class PrivateNoteEditController extends AsyncNotifier<PrivateNoteEditState> {
     try {
       final content = (cur.content ?? '').trim();
 
-      if (content.isEmpty) {
-        if (s.persisted) {
-          await _repo.markDeleted(cur.id);
-        }
-
+      // 1) 新建空白笔记：不创建
+      if (content.isEmpty && !s.persisted) {
         state = AsyncData(
           (state.value ?? const PrivateNoteEditState()).copyWith(
             saving: false,
@@ -157,24 +154,37 @@ class PrivateNoteEditController extends AsyncNotifier<PrivateNoteEditState> {
         );
         return;
       }
-      final crypto = ref.read(cryptoProvider);
-      if (!crypto.hasMasterKey) {
-        throw StateError(
-          'Encryption not enabled (no master key on this device)',
-        );
-      }
-      final enc = ref.read(cryptoProvider.notifier).encryptTextToEnc(content);
+
       final now = DateTime.now();
       final nextVersion = s.persisted ? (cur.version + 1) : 1;
 
-      final toSave = cur.copyWith(
-        content: content,
-        enc: enc,
-        updatedAt: now,
-        isSynced: false,
-        isDeleted: false,
-        version: nextVersion,
-      );
+      final crypto = ref.read(cryptoProvider);
+
+      NoteBase toSave;
+
+      // 2) 有 masterKey：加密保存
+      if (crypto.hasMasterKey) {
+        final enc = ref.read(cryptoProvider.notifier).encryptTextToEnc(content);
+
+        toSave = cur.copyWith(
+          content: content, // 你当前编辑页/list 仍依赖 content，这里先保留
+          enc: enc,
+          updatedAt: now,
+          isSynced: false,
+          isDeleted: false,
+          version: nextVersion,
+        );
+      } else {
+        // 3) 没有 masterKey：明文保存，不抛错
+        toSave = cur.copyWith(
+          content: content,
+          enc: null,
+          updatedAt: now,
+          isSynced: false,
+          isDeleted: false,
+          version: nextVersion,
+        );
+      }
 
       await _repo.upsert(toSave);
 

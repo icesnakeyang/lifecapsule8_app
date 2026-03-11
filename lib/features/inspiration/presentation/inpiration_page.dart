@@ -425,6 +425,7 @@ class _InspirationPageState extends ConsumerState<InspirationPage> {
                                   maxLines: null,
                                   decoration: const InputDecoration(
                                     fillColor: Colors.transparent,
+                                    filled: false,
                                     contentPadding: EdgeInsets.symmetric(
                                       horizontal: 4,
                                       vertical: 8,
@@ -523,7 +524,7 @@ class _InspirationPageState extends ConsumerState<InspirationPage> {
                 decoration: InputDecoration(
                   isDense: false,
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.08),
+                  fillColor: Colors.transparent,
                   hintText: 'Type keyword...',
                   hintStyle: TextStyle(
                     color: palette.onPrimary.withValues(alpha: 0.65),

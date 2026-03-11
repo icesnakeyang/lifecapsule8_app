@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
 import 'package:lifecapsule8_app/features/home/home_route_paths.dart';
-import 'package:lifecapsule8_app/features/last_wishes/application/last_wishes_done_controller.dart';
+import 'package:lifecapsule8_app/features/last_wishes/application/controllers/last_wishes_controller.dart';
 import 'package:lifecapsule8_app/features/last_wishes/last_wishes_route_paths.dart';
 
 class LastWishesDonePage extends ConsumerStatefulWidget {
@@ -16,30 +16,29 @@ class LastWishesDonePage extends ConsumerStatefulWidget {
 }
 
 class _LastWishesDonePageState extends ConsumerState<LastWishesDonePage> {
-  bool _inited = false;
+  String? _resolvedNoteId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_inited) return;
-    _inited = true;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final notifier = ref.read(lastWishesDoneControllerProvider.notifier);
+    if (_resolvedNoteId != null) return;
 
-      String? noteId = widget.noteId;
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (noteId == null && args is Map) {
-        noteId = args['noteId'] as String?;
-      }
+    String? noteId = widget.noteId;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (noteId == null && args is Map) {
+      noteId = args['noteId'] as String?;
+    }
 
-      await notifier.setNoteId(noteId);
-    });
+    _resolvedNoteId = (noteId == null || noteId.trim().isEmpty)
+        ? 'last_wishes'
+        : noteId.trim();
   }
 
   @override
   Widget build(BuildContext context) {
-    final asyncState = ref.watch(lastWishesDoneControllerProvider);
+    final noteId = _resolvedNoteId ?? 'last_wishes';
+    final asyncState = ref.watch(lastWishesControllerProvider(noteId));
     final theme = ref.read(appThemeProvider);
     final palette = theme.wishes;
     final on = palette.onPrimary;
@@ -106,8 +105,6 @@ class _LastWishesDonePageState extends ConsumerState<LastWishesDonePage> {
             ? 'Your message is safely stored.\nWe will follow your delivery settings when the time comes.'
             : 'This draft is not enabled yet.';
 
-        final primaryBtnEnabled = true;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           extendBodyBehindAppBar: true,
@@ -146,7 +143,6 @@ class _LastWishesDonePageState extends ConsumerState<LastWishesDonePage> {
                 child: Column(
                   children: [
                     const Spacer(),
-
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(22),
@@ -203,17 +199,13 @@ class _LastWishesDonePageState extends ConsumerState<LastWishesDonePage> {
                         ],
                       ),
                     ),
-
                     const Spacer(),
-
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: primaryBtnEnabled
-                              ? palette.accent
-                              : palette.accent.withValues(alpha: 0.35),
+                          color: palette.accent,
                           borderRadius: BorderRadius.circular(24),
                         ),
                         child: FilledButton(
@@ -227,7 +219,6 @@ class _LastWishesDonePageState extends ConsumerState<LastWishesDonePage> {
                             overlayColor: WidgetStateProperty.resolveWith((
                               states,
                             ) {
-                              if (!primaryBtnEnabled) return Colors.transparent;
                               return on.withValues(alpha: 0.12);
                             }),
                             shape: WidgetStateProperty.all(

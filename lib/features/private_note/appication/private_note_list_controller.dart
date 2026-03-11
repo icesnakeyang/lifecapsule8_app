@@ -10,12 +10,14 @@ import 'package:lifecapsule8_app/features/notes_base/domain/note_kind.dart';
 class PrivateNoteListItem {
   final String id;
   final String title;
+  final DateTime createdAt;
   final DateTime updatedAt;
   final bool isSynced;
 
   const PrivateNoteListItem({
     required this.id,
     required this.title,
+    required this.createdAt,
     required this.updatedAt,
     required this.isSynced,
   });
@@ -80,7 +82,8 @@ class PrivateNoteListController extends Notifier<PrivateNoteListState> {
         .watchList(kind: NoteKind.privateNote)
         .listen(
           (notes) {
-            final items = notes.map(_toItem).toList();
+            final items = notes.map(_toItem).toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             state = state.copyWith(
               loading: false,
               items: items,
@@ -99,6 +102,7 @@ class PrivateNoteListController extends Notifier<PrivateNoteListState> {
     return PrivateNoteListItem(
       id: n.id,
       title: title,
+      createdAt: n.createdAt,
       updatedAt: n.updatedAt,
       isSynced: n.isSynced,
     );
@@ -110,5 +114,19 @@ class PrivateNoteListController extends Notifier<PrivateNoteListState> {
 
   Future<void> deleteById(String id) async {
     await _repo.markDeleted(id);
+  }
+
+  Future<void> restore(String id) async {
+    final note = await _repo.getById(id);
+    if (note == null) return;
+
+    await _repo.upsert(
+      note.copyWith(
+        isDeleted: false,
+        updatedAt: DateTime.now(),
+        isSynced: false,
+        version: note.version + 1,
+      ),
+    );
   }
 }

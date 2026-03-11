@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:lifecapsule8_app/app/theme/app_theme.dart';
 import 'package:lifecapsule8_app/app/theme/theme_controller.dart';
-import 'package:lifecapsule8_app/features/last_wishes/application/last_wishes_list_controller.dart';
+import 'package:lifecapsule8_app/core/utils/date_time_utils.dart';
+import 'package:lifecapsule8_app/features/last_wishes/application/controllers/last_wishes_list_controller.dart';
 import 'package:lifecapsule8_app/features/last_wishes/last_wishes_route_paths.dart';
+import 'package:lifecapsule8_app/features/notes_base/domain/note_base.dart';
+import 'package:lifecapsule8_app/features/notes_base/domain/note_id.dart';
 
 class LastWishesListPage extends ConsumerWidget {
   const LastWishesListPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncState = ref.watch(lastWishesListControllerProvider);
+    final state = ref.watch(lastWishesListControllerProvider);
+    final items = state.filtered;
+
     final theme = ref.read(appThemeProvider);
     final palette = theme.wishes;
     final on = palette.onPrimary;
@@ -26,16 +30,25 @@ class LastWishesListPage extends ConsumerWidget {
           style: TextStyle(
             color: on,
             fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         iconTheme: IconThemeData(color: on),
-        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
               ref.read(lastWishesListControllerProvider.notifier).refresh();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                LastWishesRoutePaths.edit,
+                arguments: {'noteId': NoteId.newLastWish()},
+              );
             },
           ),
         ],
@@ -49,223 +62,274 @@ class LastWishesListPage extends ConsumerWidget {
           ),
         ),
         child: SafeArea(
-          child: asyncState.when(
-            loading: () => Center(child: CircularProgressIndicator(color: on)),
-            error: (e, _) => Center(
-              child: Text(
-                'Error: $e',
-                style: TextStyle(color: on.withValues(alpha: 0.8)),
-              ),
-            ),
-            data: (s) {
-              final items = s.items;
-
-              if (items.isEmpty) {
-                return _EmptyState(theme: theme);
+          child: Builder(
+            builder: (context) {
+              if (state.loading) {
+                return Center(child: CircularProgressIndicator(color: on));
               }
 
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final item = items[index];
+              if (state.error != null && state.error!.isNotEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Error: ${state.error!}',
+                      style: TextStyle(color: on.withValues(alpha: 0.85)),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
 
-                  return _WishCard(
-                    theme: theme,
-                    title: item.title ?? 'Untitled',
-                    preview: item.preview ?? '',
-                    enabled: item.enabled,
-                    waitingYears: item.waitingYears,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        LastWishesRoutePaths.preview,
-                        arguments: {'noteId': item.id},
-                      );
-                    },
-                  );
+              if (items.isEmpty) {
+                return _EmptyView(onPrimary: on);
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final n = items[index];
+                  return _WishCard(note: n);
                 },
               );
             },
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: palette.accent,
-        onPressed: () {
-          Navigator.pushNamed(
-            context,
-            LastWishesRoutePaths.edit,
-            arguments: {'noteId': null},
-          );
-        },
-        child: Icon(Icons.add_rounded, color: on),
-      ),
     );
   }
 }
 
-class _WishCard extends StatelessWidget {
-  final AppTheme theme;
-  final String title;
-  final String preview;
-  final bool enabled;
-  final int? waitingYears;
-  final VoidCallback onTap;
+class _WishCard extends ConsumerWidget {
+  final NoteBase note;
 
-  const _WishCard({
-    required this.theme,
-    required this.title,
-    required this.preview,
-    required this.enabled,
-    required this.waitingYears,
-    required this.onTap,
-  });
+  const _WishCard({required this.note});
 
-  @override
-  Widget build(BuildContext context) {
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final theme = ref.read(appThemeProvider);
     final palette = theme.wishes;
     final on = palette.onPrimary;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: on.withValues(alpha: 0.16)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: on.withValues(alpha: 0.95),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: enabled
-                        ? palette.accent.withValues(alpha: 0.18)
-                        : on.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: enabled
-                          ? palette.accent.withValues(alpha: 0.4)
-                          : on.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Text(
-                    enabled ? 'Enabled' : 'Draft',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: enabled
-                          ? palette.onPrimary.withValues(alpha: 0.95)
-                          : on.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ),
-              ],
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          backgroundColor: palette.accent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Delete this wish?',
+            style: TextStyle(
+              color: palette.onPrimary,
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 10),
-            Text(
-              preview.isEmpty ? '(No content)' : preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: on.withValues(alpha: 0.75),
-                fontWeight: FontWeight.w500,
+          ),
+          content: Text(
+            'This will remove it from the list.',
+            style: TextStyle(color: on.withValues(alpha: 1)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: on.withValues(alpha: 0.8)),
               ),
             ),
-            if (waitingYears != null) ...[
-              const SizedBox(height: 12),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.error.withValues(alpha: 0.95),
+                foregroundColor: on,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    await ref.read(lastWishesListControllerProvider.notifier).delete(note.id);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Deleted successful.',
+          style: TextStyle(color: palette.onPrimary),
+        ),
+        backgroundColor: palette.accent,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.read(appThemeProvider);
+    final palette = theme.wishes;
+
+    final content = (note.content ?? '').trim();
+    final preview = content.isEmpty ? '(Empty)' : content;
+    final enabled = (note.meta['enabled'] as bool?) ?? false;
+    final years = (note.meta['waitingYears'] as num?)?.toInt();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.pushNamed(
+            context,
+            LastWishesRoutePaths.edit,
+            arguments: {'noteId': note.id},
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: palette.onPrimary.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.hourglass_bottom_rounded,
-                    size: 16,
-                    color: on.withValues(alpha: 0.6),
+                  Expanded(
+                    child: Text(
+                      preview,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: palette.onPrimary,
+                        fontSize: 15,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$waitingYears year${waitingYears == 1 ? '' : 's'} waiting',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: on.withValues(alpha: 0.7),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: palette.onPrimary.withValues(alpha: 0.75),
+                    ),
+                    tooltip: 'Delete',
+                    onPressed: () async {
+                      await _confirmDelete(context, ref);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Text(
+                      DateFormatter.ymdHm(note.updatedAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: palette.onPrimary.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Wrap(
+                      alignment: WrapAlignment.start,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (enabled)
+                          _Tag(
+                            text: 'Enabled',
+                            textColor: palette.onPrimary,
+                            borderColor: palette.onPrimary.withValues(
+                              alpha: 0.16,
+                            ),
+                            backgroundColor: palette.accent,
+                          ),
+                        if (years != null)
+                          _Tag(
+                            text: '$years year${years == 1 ? '' : 's'}',
+                            textColor: palette.onPrimary.withValues(alpha: 0.9),
+                            borderColor: palette.onPrimary.withValues(
+                              alpha: 0.16,
+                            ),
+                            backgroundColor: palette.accent,
+                          ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  final AppTheme theme;
+class _Tag extends StatelessWidget {
+  final String text;
+  final Color textColor;
+  final Color borderColor;
+  final Color backgroundColor;
 
-  const _EmptyState({required this.theme});
+  const _Tag({
+    required this.text,
+    required this.textColor,
+    required this.borderColor,
+    required this.backgroundColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final palette = theme.wishes;
-    final on = palette.onPrimary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
 
+class _EmptyView extends StatelessWidget {
+  final Color onPrimary;
+
+  const _EmptyView({required this.onPrimary});
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.favorite_border_rounded,
-              size: 56,
-              color: on.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No Last Wishes Yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: on,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create your first message for the future.\nIt will stay safe until the right time.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: on.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
+      child: Text(
+        'No wishes yet',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: onPrimary.withValues(alpha: 0.7),
         ),
       ),
     );
